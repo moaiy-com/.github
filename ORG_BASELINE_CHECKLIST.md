@@ -7,7 +7,7 @@ This checklist covers controls that cannot be enforced only by repository files.
 Apply to:
 
 - `moaiy-com/moaiy` -> `main`
-- `moaiy-com/moaiy-com` -> `master` (or `main` after migration)
+- `moaiy-com/moaiy-com` -> `main`
 
 Minimum settings:
 
@@ -27,10 +27,8 @@ Minimum settings:
 
 ## 3) Default Branch Consistency
 
-Normalize default branch naming:
-
-- Migrate `moaiy-com/moaiy-com` from `master` to `main` when convenient
-- Update workflow branch filters after migration
+- Keep default branch naming aligned to `main`
+- Keep workflow branch filters aligned to the default branch
 
 ## 4) Enforce Review Ownership
 
@@ -43,3 +41,12 @@ Normalize default branch naming:
 - Enable linear history on high-risk repositories
 - Restrict who can push to matching branches
 
+## 6) Overview Health Check
+
+Run a monthly profile and discoverability review:
+
+- Verify organization metadata (description, website, social, avatar)
+- Verify pinned repository order matches product priorities
+- Verify profile README links and messaging
+
+Reference checklist: `OVERVIEW_HEALTHCHECK.md`
