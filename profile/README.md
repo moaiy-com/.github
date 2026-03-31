@@ -1,12 +1,19 @@
-# Welcome to Moaiy
+# moaiy.com
 
-We build Cryptology easy-to-use
+Moaiy builds an open-source macOS OpenPGP application focused on practical
+encryption workflows for everyday users.
 
-### Projects
+## Projects
 
-- [Moaiy APP](https://github.com/moaiy-com/moaiy): An easy-to-use OpenPGP graphical interface information encryption tool for everyone.
+- [moaiy](https://github.com/moaiy-com/moaiy): macOS app (SwiftUI) for OpenPGP key management and encryption/decryption.
+- [moaiy-com](https://github.com/moaiy-com/moaiy-com): official website source code.
 
-### Contact
+## Security
 
-- [X](https://x.com/moaiycom)
-- [website](https://moaiy.com)
+- Report vulnerabilities privately via email: `security@moaiy.com`
+- Prefer private disclosure over public issues.
+
+## Contact
+
+- Website: [moaiy.com](https://moaiy.com)
+- X: [@moaiycom](https://x.com/moaiycom)
