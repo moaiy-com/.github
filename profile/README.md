@@ -47,3 +47,7 @@ We welcome focused contributions that improve product quality and user experienc
 - Do not report security issues publicly; use the private channel in [SECURITY.md](https://github.com/moaiy-com/.github/blob/main/SECURITY.md).
 
 </details>
+
+## Icon/Logo Attribution
+
+Moai Statue Icons by ProSymbols from [Noun Project](https://thenounproject.com/browse/icons/term/moai-statue/) (CC BY 3.0)
