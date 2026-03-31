@@ -1,0 +1,11 @@
+<svg width="1280" height="320" viewBox="0 0 1280 320" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1280" height="320" rx="24" fill="#F7F9FC"/>
+  <rect x="24" y="24" width="1232" height="272" rx="20" fill="#FFFFFF"/>
+  <circle cx="168" cy="160" r="72" fill="#E8EEF9"/>
+  <path d="M168 103C149 103 134 118 134 137V188H202V137C202 118 187 103 168 103Z" fill="#1E293B"/>
+  <rect x="134" y="188" width="68" height="24" rx="8" fill="#334155"/>
+  <text x="276" y="132" fill="#0F172A" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="44" font-weight="700">moaiy.com</text>
+  <text x="276" y="182" fill="#334155" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="24" font-weight="500">Practical OpenPGP tools for everyday macOS workflows</text>
+  <rect x="276" y="214" width="256" height="42" rx="21" fill="#EEF2FF"/>
+  <text x="300" y="241" fill="#3730A3" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="18" font-weight="600">Open Source · Product First</text>
+</svg>
