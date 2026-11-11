@@ -1,0 +1,280 @@
+#!/usr/bin/env bash
+# Drive verification for the moaiy-com/.github org standards repo.
+# Usage: control-moaiy-github <command> [args]
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ORG_LOGIN="${MOAIY_ORG_LOGIN:-moaiy-com}"
+EVIDENCE_DIR="${MOAIY_VERIFY_EVIDENCE_DIR:-$SKILL_DIR/artifacts/latest}"
+PROFILE_README="$ROOT/profile/README.md"
+ASSETS_DIR="$ROOT/profile/assets"
+
+mkdir -p "$EVIDENCE_DIR"
+
+die() {
+  echo "control-moaiy-github: $*" >&2
+  exit 1
+}
+
+cmd_doctor() {
+  local ok=1
+  echo "ROOT=$ROOT"
+  echo "ORG_LOGIN=$ORG_LOGIN"
+  echo "EVIDENCE_DIR=$EVIDENCE_DIR"
+
+  [[ -f "$PROFILE_README" ]] || { echo "FAIL missing $PROFILE_README"; ok=0; }
+  [[ -f "$ROOT/SECURITY.md" ]] || { echo "FAIL missing SECURITY.md"; ok=0; }
+  [[ -f "$ROOT/OVERVIEW_HEALTHCHECK.md" ]] || { echo "FAIL missing OVERVIEW_HEALTHCHECK.md"; ok=0; }
+  [[ -d "$ASSETS_DIR" ]] || { echo "FAIL missing assets dir"; ok=0; }
+  command -v curl >/dev/null || { echo "FAIL curl not on PATH"; ok=0; }
+  command -v gh >/dev/null || { echo "FAIL gh not on PATH"; ok=0; }
+
+  if gh api "orgs/$ORG_LOGIN" --jq '.login' >/dev/null 2>&1; then
+    echo "gh org API: ok"
+  else
+    echo "FAIL gh cannot read orgs/$ORG_LOGIN"
+    ok=0
+  fi
+
+  if [[ "$ok" -eq 1 ]]; then
+    echo "doctor: PASS"
+    return 0
+  fi
+  echo "doctor: FAIL"
+  return 1
+}
+
+# Check one URL; write status line to evidence. Exit 0 if final HTTP code is 200 or 301.
+check_one_url() {
+  local url="$1"
+  local label="${2:-$url}"
+  local out code
+  out="$(curl -sS -o /dev/null -w '%{http_code} %{url_effective}' -L --max-redirs 10 --max-time 30 "$url" || true)"
+  code="${out%% *}"
+  printf '%s\t%s\t%s\n' "$label" "$code" "$out" | tee -a "$EVIDENCE_DIR/link-checks.tsv"
+  case "$code" in
+    200|301) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+cmd_check_links() {
+  : >"$EVIDENCE_DIR/link-checks.tsv"
+  local failed=0
+  local urls=(
+    "https://moaiy.com"
+    "https://github.com/moaiy-com/moaiy"
+    "https://github.com/moaiy-com/moaiy/tree/main/doc"
+    "https://github.com/moaiy-com/moaiy/issues"
+    "https://github.com/moaiy-com/moaiy-com"
+    "https://github.com/moaiy-com/.github"
+    "https://github.com/moaiy-com/.github/blob/main/SECURITY.md"
+    "https://github.com/moaiy-com/.github/blob/main/CONTRIBUTING.md"
+    "https://github.com/moaiy-com/moaiy/releases"
+    "https://x.com/moaiycom"
+    "https://thenounproject.com/browse/icons/term/moai-statue/"
+  )
+
+  echo "Checking ${#urls[@]} profile/Quick Links URLs..."
+  local u
+  for u in "${urls[@]}"; do
+    if check_one_url "$u"; then
+      echo "OK  $u"
+    else
+      echo "BAD $u"
+      failed=1
+    fi
+  done
+
+  # Local asset paths referenced by the profile README must exist.
+  local asset
+  for asset in overview-banner-dark.svg overview-banner-light.svg; do
+    if [[ -f "$ASSETS_DIR/$asset" ]]; then
+      echo "OK  local asset $asset"
+      printf 'local-asset\t%s\tpresent\n' "$asset" >>"$EVIDENCE_DIR/link-checks.tsv"
+    else
+      echo "BAD local asset $asset"
+      printf 'local-asset\t%s\tmissing\n' "$asset" >>"$EVIDENCE_DIR/link-checks.tsv"
+      failed=1
+    fi
+  done
+
+  if grep -q 'https://moaiy.com' "$PROFILE_README" \
+    && grep -q 'moaiy-com/moaiy' "$PROFILE_README" \
+    && grep -q 'security@moaiy.com' "$PROFILE_README"; then
+    echo "OK  profile messaging anchors present"
+    printf 'messaging\tanchors\tpresent\n' >>"$EVIDENCE_DIR/link-checks.tsv"
+  else
+    echo "BAD profile messaging anchors missing"
+    printf 'messaging\tanchors\tmissing\n' >>"$EVIDENCE_DIR/link-checks.tsv"
+    failed=1
+  fi
+
+  cp "$EVIDENCE_DIR/link-checks.tsv" "$EVIDENCE_DIR/profile-links.proof.tsv"
+  [[ "$failed" -eq 0 ]] || die "check-links failed; see $EVIDENCE_DIR/link-checks.tsv"
+  echo "check-links: PASS → $EVIDENCE_DIR/profile-links.proof.tsv"
+}
+
+cmd_check_org_metadata() {
+  local json expected_desc expected_blog expected_twitter
+  expected_desc="Open-source tools for practical OpenPGP workflows on macOS."
+  expected_blog="https://moaiy.com"
+  expected_twitter="moaiycom"
+
+  json="$(gh api "orgs/$ORG_LOGIN" --jq '{description,blog,twitter_username,updated_at}')"
+  printf '%s\n' "$json" | tee "$EVIDENCE_DIR/org-metadata.json"
+
+  local desc blog twitter
+  desc="$(printf '%s' "$json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["description"])')"
+  blog="$(printf '%s' "$json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["blog"])')"
+  twitter="$(printf '%s' "$json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["twitter_username"])')"
+
+  local failed=0
+  [[ "$desc" == "$expected_desc" ]] || { echo "BAD description: got [$desc]"; failed=1; }
+  [[ "$blog" == "$expected_blog" ]] || { echo "BAD blog: got [$blog]"; failed=1; }
+  [[ "$twitter" == "$expected_twitter" ]] || { echo "BAD twitter: got [$twitter]"; failed=1; }
+
+  local pins names
+  pins="$(gh api graphql -f query="query { organization(login:\"$ORG_LOGIN\") { pinnedItems(first: 6, types: REPOSITORY) { nodes { ... on Repository { name } } } } }")"
+  printf '%s\n' "$pins" | tee "$EVIDENCE_DIR/org-pinned.json"
+  names="$(printf '%s' "$pins" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(",".join(n.get("name","") for n in d["data"]["organization"]["pinnedItems"]["nodes"]))')"
+  printf 'pinned_names=%s\n' "$names" | tee -a "$EVIDENCE_DIR/org-metadata.json"
+  # Preferred discoverability order from OVERVIEW_HEALTHCHECK.md (prefix match allows extra pins after the required three).
+  case "$names" in
+    moaiy,moaiy-com,.github|moaiy,moaiy-com,.github,*) ;;
+    *)
+      echo "BAD pinned order: expected moaiy,moaiy-com,.github (got [$names])"
+      failed=1
+      ;;
+  esac
+
+  [[ "$failed" -eq 0 ]] || die "check-org-metadata failed"
+  echo "check-org-metadata: PASS → $EVIDENCE_DIR/org-metadata.json"
+}
+
+cmd_check_security_surface() {
+  local failed=0
+  [[ -f "$ROOT/SECURITY.md" ]] || failed=1
+  grep -q 'security@moaiy.com' "$ROOT/SECURITY.md" || { echo "BAD SECURITY.md missing email"; failed=1; }
+  grep -q '72 hours' "$ROOT/SECURITY.md" || { echo "BAD SECURITY.md missing 72h ack"; failed=1; }
+  grep -q '7 business days' "$ROOT/SECURITY.md" || { echo "BAD SECURITY.md missing triage target"; failed=1; }
+
+  if [[ -f "$ROOT/.github/ISSUE_TEMPLATE/config.yml" ]]; then
+    grep -q 'security@moaiy.com' "$ROOT/.github/ISSUE_TEMPLATE/config.yml" || {
+      echo "BAD issue template config missing security contact"
+      failed=1
+    }
+    grep -q 'blank_issues_enabled: false' "$ROOT/.github/ISSUE_TEMPLATE/config.yml" || {
+      echo "BAD blank issues should be disabled"
+      failed=1
+    }
+  else
+    echo "BAD missing ISSUE_TEMPLATE/config.yml"
+    failed=1
+  fi
+
+  {
+    echo "SECURITY.md present: $([[ -f $ROOT/SECURITY.md ]] && echo yes || echo no)"
+    grep -n 'security@moaiy.com\|72 hours\|7 business days' "$ROOT/SECURITY.md" || true
+    echo "---"
+    cat "$ROOT/.github/ISSUE_TEMPLATE/config.yml"
+  } | tee "$EVIDENCE_DIR/security-surface.proof.txt"
+
+  [[ "$failed" -eq 0 ]] || die "check-security-surface failed"
+  echo "check-security-surface: PASS → $EVIDENCE_DIR/security-surface.proof.txt"
+}
+
+cmd_check_templates() {
+  local failed=0
+  local required=(
+    "$ROOT/.github/pull_request_template.md"
+    "$ROOT/.github/CODEOWNERS"
+    "$ROOT/.github/ISSUE_TEMPLATE/bug_report.yml"
+    "$ROOT/.github/ISSUE_TEMPLATE/feature_request.yml"
+    "$ROOT/.github/ISSUE_TEMPLATE/config.yml"
+    "$ROOT/CODE_OF_CONDUCT.md"
+    "$ROOT/CONTRIBUTING.md"
+  )
+  : >"$EVIDENCE_DIR/templates.proof.txt"
+  local f
+  for f in "${required[@]}"; do
+    if [[ -f "$f" ]]; then
+      echo "OK  ${f#"$ROOT"/}" | tee -a "$EVIDENCE_DIR/templates.proof.txt"
+    else
+      echo "BAD missing ${f#"$ROOT"/}" | tee -a "$EVIDENCE_DIR/templates.proof.txt"
+      failed=1
+    fi
+  done
+  [[ "$failed" -eq 0 ]] || die "check-templates failed"
+  echo "check-templates: PASS → $EVIDENCE_DIR/templates.proof.txt"
+}
+
+cmd_check_assets() {
+  local failed=0
+  : >"$EVIDENCE_DIR/assets.proof.txt"
+  local asset
+  for asset in org-avatar.svg overview-banner-dark.svg overview-banner-light.svg; do
+    local path="$ASSETS_DIR/$asset"
+    if [[ -f "$path" ]] && grep -q '<svg' "$path"; then
+      local bytes
+      bytes="$(wc -c <"$path" | tr -d ' ')"
+      echo "OK  $asset bytes=$bytes" | tee -a "$EVIDENCE_DIR/assets.proof.txt"
+    else
+      echo "BAD $asset" | tee -a "$EVIDENCE_DIR/assets.proof.txt"
+      failed=1
+    fi
+  done
+  # Profile README must reference both banners.
+  grep -q 'overview-banner-dark.svg' "$PROFILE_README" || failed=1
+  grep -q 'overview-banner-light.svg' "$PROFILE_README" || failed=1
+  [[ "$failed" -eq 0 ]] || die "check-assets failed"
+  echo "check-assets: PASS → $EVIDENCE_DIR/assets.proof.txt"
+}
+
+cmd_cleanup() {
+  # No long-lived process. Only remove scratch dirs we created; never delete evidence.
+  if [[ -n "${MOAIY_VERIFY_SCRATCH:-}" && -d "${MOAIY_VERIFY_SCRATCH}" ]]; then
+    rm -rf "${MOAIY_VERIFY_SCRATCH}"
+    echo "removed scratch $MOAIY_VERIFY_SCRATCH"
+  fi
+  echo "cleanup: done (evidence kept under $EVIDENCE_DIR)"
+}
+
+usage() {
+  cat <<'EOF'
+Usage: control-moaiy-github <command>
+
+Commands:
+  doctor                 Read-only health check for this verification surface
+  check-links            HTTP-check profile Quick Links + local asset refs
+  check-org-metadata     Compare live org description/blog/twitter (+ dump pins)
+  check-security-surface Verify SECURITY.md + issue security contact config
+  check-templates        Confirm required governance/template files exist
+  check-assets           Confirm profile SVG assets exist and are referenced
+  cleanup                Remove scratch state; keep evidence
+
+Env:
+  MOAIY_ORG_LOGIN            default moaiy-com
+  MOAIY_VERIFY_EVIDENCE_DIR  where proof files are written (default: skill artifacts/latest)
+  MOAIY_VERIFY_SCRATCH       optional scratch dir removed by cleanup
+EOF
+}
+
+main() {
+  local cmd="${1:-}"
+  shift || true
+  case "$cmd" in
+    doctor) cmd_doctor "$@" ;;
+    check-links) cmd_check_links "$@" ;;
+    check-org-metadata) cmd_check_org_metadata "$@" ;;
+    check-security-surface) cmd_check_security_surface "$@" ;;
+    check-templates) cmd_check_templates "$@" ;;
+    check-assets) cmd_check_assets "$@" ;;
+    cleanup) cmd_cleanup "$@" ;;
+    ""|-h|--help|help) usage ;;
+    *) die "unknown command: $cmd" ;;
+  esac
+}
+
+main "$@"
